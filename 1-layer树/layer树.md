@@ -72,18 +72,17 @@ CALayer并不清楚具体的*响应链*（iOS通过视图层级关系用来传�
 
 之后就可以在代码中直接引用CALayer的属性和方法。在清单1.1中，我们用创建了一个CALayer，设置了它的backgroundColor属性，然后添加到layerView背后相关layer的子layer（这段代码的前提是通过IB创建了layerView并做好了连接），图1.5显示了结果。
 
-	清单1.1 给view添加一个蓝色子layer
-	
-    #import "ViewController.h"
-    #import <QuartzCore/QuartzCore.h>    @interface ViewController ()
-    @property (nonatomic, weak) IBOutlet UIView *layerView;    ￼
-    @end
-    @implementation ViewController
-    - (void)viewDidLoad
-    {        [super viewDidLoad];        //create sublayer        CALayer *blueLayer = [CALayer layer];        blueLayer.frame = CGRectMake(50.0f, 50.0f, 100.0f, 100.0f);
-        blueLayer.backgroundColor = [UIColor blueColor].CGColor;        //add it to our view        [self.layerView.layer addSublayer:blueLayer];
-    }    @end
-    
+清单1.1 给view添加一个蓝色子layer
+``` objective-c	
+#import "ViewController.h"
+#import <QuartzCore/QuartzCore.h>@interface ViewController ()
+@property (nonatomic, weak) IBOutlet UIView *layerView;￼
+@end
+@implementation ViewController
+- (void)viewDidLoad
+{    [super viewDidLoad];    //create sublayer    CALayer *blueLayer = [CALayer layer];    blueLayer.frame = CGRectMake(50.0f, 50.0f, 100.0f, 100.0f);
+    blueLayer.backgroundColor = [UIColor blueColor].CGColor;    //add it to our view    [self.layerView.layer addSublayer:blueLayer];
+}@end```    
 <img src="./1.5.jpeg" alt="图1.5" title="图1.5" width="700"/>
 图1.5 白色UIView内部嵌套的蓝色CALayer
 
