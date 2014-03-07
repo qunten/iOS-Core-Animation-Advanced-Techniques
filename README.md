@@ -12,3 +12,5 @@ iOS-Core-Animation-Advanced-Techniques
 * [5-变换](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/5-变换/变换.md)
 
 * [7-隐式动画](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/7-隐式动画/隐式动画.md)
+
+* [8-显式动画](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/8-显式动画/显式动画.md)
