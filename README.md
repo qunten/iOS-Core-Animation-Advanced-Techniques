@@ -11,12 +11,11 @@ iOS-Core-Animation-Advanced-Techniques
 
 * [3-图层几何学](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/3-图层几何学/图层几何学.md)
 
-* [4-视觉效果]()
+* [4-视觉效果](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/4-视觉效果/4-视觉效果.md)
 
 * [5-变换](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/5-变换/变换.md)
 
 * [6-有专门作用的图层]()
-
 
 * [7-隐式动画](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/7-隐式动画/隐式动画.md)
 
@@ -26,7 +25,7 @@ iOS-Core-Animation-Advanced-Techniques
 
 * [10-缓冲](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/10-缓冲/缓冲.md)
 
-* [11-基于定时器的动画]()
+* [11-基于定时器的动画](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/11-基于定时器的动画/基于定时器的动画.md)
 
 * [12-速度的论调]()
 
