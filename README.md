@@ -15,7 +15,7 @@ iOS-Core-Animation-Advanced-Techniques
 
 * [5-变换](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/5-变换/变换.md)
 
-* [6-有专门作用的图层]()
+* [6-专有图层](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/6-专有图层/6-专有图层.md)
 
 * [7-隐式动画](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/7-隐式动画/隐式动画.md)
 
@@ -27,9 +27,9 @@ iOS-Core-Animation-Advanced-Techniques
 
 * [11-基于定时器的动画](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/11-基于定时器的动画/基于定时器的动画.md)
 
-* [12-速度的论调]()
+* [12-速度的曲调](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/12-速度的曲调/速度的曲调.md)
 
-* [13-绘图效率]()
+* [13-高效绘图](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/13-高效绘图/13-高效绘图.md)
 
 * [14-图像IO]()
 
