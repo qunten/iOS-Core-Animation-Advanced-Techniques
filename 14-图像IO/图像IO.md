@@ -50,4 +50,21 @@
 图14.2 时间分析工具展示了CPU瓶颈
 这里提升性能唯一的方式就是在另一个线程中加载图片。这并不能够降低实际的加载时间（可能情况会更糟，因为系统可能要消耗CPU时间来处理加载的图片数据），但是主线程能够有时间做一些别的事情，比如响应用户输入，以及滑动动画。
 为了在后台线程加载图片，我们可以使用GCD或者`NSOperationQueue`创建自定义线程，或者使用`CATiledLayer`。为了从远程网络加载图片，我们可以使用异步的`NSURLConnection`，但是对本地存储的图片，并不十分有效。
-
+###GCD和`NSOperationQueue`
+GCD（Grand Central Dispatch）和`NSOperationQueue`很类似，都给我们提供了队列闭包块来在线程中按一定顺序来执行。`NSOperationQueue`有一个Objecive-C接口（而不是使用GCD的全局C函数），同样在操作优先级和依赖关系上提供了很好的粒度控制，但是需要更多地设置代码。
+清单14.2显示了在低优先级的后台队列而不是主线程使用GCD加载图片的`-collectionView:cellForItemAtIndexPath:`方法，然后当需要加载图片到视图的时候切换到主线程，因为在后台线程访问视图会有安全隐患。
+由于视图在`UICollectionView`会被循环利用，我们加载图片的时候不能确定是否被不同的索引重新复用。为了避免图片加载到错误的视图中，我们在加载前把单元格打上索引的标签，然后在设置图片的时候检测标签是否发生了改变。
+清单14.2 使用GCD加载传送图片
+```objective-c
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView
+                    cellForItemAtIndexPath:(NSIndexPath *)indexPath
+{    //dequeue cell    UICollectionViewCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"Cell"                                                                           forIndexPath:indexPath];    //add image view    const NSInteger imageTag = 99;    UIImageView *imageView = (UIImageView *)[cell viewWithTag:imageTag];
+    if (!imageView) {        imageView = [[UIImageView alloc] initWithFrame: cell.contentView.bounds];        imageView.tag = imageTag;        [cell.contentView addSubview:imageView];
+    }    //tag cell with index and clear current image    cell.tag = indexPath.row;
+    imageView.image = nil;    //switch to background thread    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{        //load image        NSInteger index = indexPath.row;        NSString *imagePath = self.imagePaths[index];        UIImage *image = [UIImage imageWithContentsOfFile:imagePath];        //set image on main thread, but only if index still matches up        dispatch_async(dispatch_get_main_queue(), ^{
+            if (index == cell.tag) {                imageView.image = image; }        });
+    });    return cell;
+}```
+当运行更新后的版本，性能比之前不用线程的版本好多了，但仍然并不完美（图14.3）。
+我们可以看到`+imageWithContentsOfFile:`方法并不在CPU时间轨迹的最顶部，所以我们的确修复了延迟加载的问题。问题在于我们假设传送器的性能瓶颈在于图片文件的加载，但实际上并不是这样。加载图片数据到内存中只是问题的第一部分。<img src="./14.3.jpeg" alt="图14.3" title="图14.3" width="700" />
+图14.3 使用后台线程加载图片来提升性能
