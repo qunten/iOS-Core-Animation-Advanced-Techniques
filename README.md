@@ -31,6 +31,6 @@ iOS-Core-Animation-Advanced-Techniques
 
 * [13-高效绘图](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/13-高效绘图/13-高效绘图.md)
 
-* [14-图像IO](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/tree/master/14-图像IO)
+* [14-图像IO](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/14-图像IO/图像IO.md)
 
 * [15-图层性能](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/15-图层性能/15-图层性能.md)
