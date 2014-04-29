@@ -80,4 +80,66 @@ CGImageRelease(imageRef);CFRelease(source);```这样就可以使用`kCGImage
 最后一种方式就是使用UIKit加载图片，但是立刻会知道`CGContext`中去。图片必须要在绘制之前解压，所以就强制了解压的及时性。这样的好处在于绘制图片可以再后台线程（例如加载本身）执行，而不会阻塞UI。
 有两种方式可以为强制解压提前渲染图片：
 * 将图片的一个像素绘制成一个像素大小的`CGContext`。这样仍然会解压整张图片，但是绘制本身并没有消耗任何时间。这样的好处在于加载的图片并不会在特定的设备上为绘制做优化，所以可以在任何时间点绘制出来。同样iOS也就可以丢弃解压后的图片来节省内存了。
-* 将整张图片绘制到`CGContext`中，丢弃原始的图片，并且用一个从上下文内容中新的图片来代替。这样比绘制单一像素那样需要更加复杂的计算，但是因此产生的图片将会为绘制做优化，而且由于原始压缩图片被抛弃了，iOS就不能够随时丢弃任何解压后的图片来节省内存了。It’s worth noting that Apple specifically recommends against using these kinds of tricks to bypass the standard image decompression logic (which is not surprising—they chose the default behavior for a reason), but if you are building apps that use a lot of large images, then you sometimes have to game the system if you want great performance.
+* 将整张图片绘制到`CGContext`中，丢弃原始的图片，并且用一个从上下文内容中新的图片来代替。这样比绘制单一像素那样需要更加复杂的计算，但是因此产生的图片将会为绘制做优化，而且由于原始压缩图片被抛弃了，iOS就不能够随时丢弃任何解压后的图片来节省内存了。需要注意的是苹果特别推荐了不要使用这些诡计来绕过标准图片解压逻辑（所以也是他们选择用默认处理方式的原因），但是如果你使用很多大图来构建应用，那如果想提升性能，就只能和系统博弈了。如果不使用`+imageNamed:`，那么把整张图片绘制到`CGContext`可能是最佳的方式了。尽管你可能认为多余的绘制相较别的解压技术而言性能不是很高，但是新创建的图片（在特定的设备上做过优化）可能比原始图片绘制的更快。
+同样，如果想显示图片到比原始尺寸小的容器中，那么一次性在后台线程重新绘制到正确的尺寸会比每次显示的时候都做缩放会更有效（尽管在这个例子中我们加载的图片呈现正确的尺寸，所以不需要多余的优化）。
+如果修改了`-collectionView:cellForItemAtIndexPath:`方法来重绘图片（清单14.3），你会发现滑动更加平滑。
+清单14.3 强制图片解压显示
+```objective-c- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView
+                  cellForItemAtIndexPath:(NSIndexPath *)indexPath￼{    //dequeue cell    UICollectionViewCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"Cell" forIndexPath:indexPath];    ...    //switch to background thread    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{        //load image        NSInteger index = indexPath.row;        NSString *imagePath = self.imagePaths[index];        UIImage *image = [UIImage imageWithContentsOfFile:imagePath];        //redraw image using device context        UIGraphicsBeginImageContextWithOptions(imageView.bounds.size, YES, 0);
+        [image drawInRect:imageView.bounds];        image = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();        //set image on main thread, but only if index still matches up        dispatch_async(dispatch_get_main_queue(), ^{            if (index == imageView.tag) {                imageView.image = image;
+            }        });
+    });    return cell;
+}```
+###`CATiledLayer`
+如第6章“专用图层”中的例子所示，`CATiledLayer`可以用来异步加载和显示大型图片，而不阻塞用户输入。但是我们同样可以使用`CATiledLayer`在`UICollectionView`中为每个表格创建分离的`CATiledLayer`实例加载传动器图片，每个表格仅使用一个图层。这样使用`CATiledLayer`有几个潜在的弊端：
+* `CATiledLayer`的队列和缓存算法没有暴露出来，所以我们只能祈祷它能匹配我们的需求
+* `CATiledLayer`需要我们每次重绘图片到`CGContext`中，即使它已经解压缩，而且和我们单元格尺寸一样（因此可以直接用作图层内容，而不需要重绘）。
+我们来看看这些弊端有没有造成不同：清单14.4显示了使用`CATiledLayer`对图片传送器的重新实现。
+清单14.4 使用`CATiledLayer`的图片传送器
+```objective-c
+#import "ViewController.h"#import <QuartzCore/QuartzCore.h>
+@interface ViewController() <UICollectionViewDataSource>
+@property (nonatomic, copy) NSArray *imagePaths;@property (nonatomic, weak) IBOutlet UICollectionView *collectionView;
+@end
+@implementation ViewController
+- (void)viewDidLoad
+{    //set up data    self.imagePaths = [[NSBundle mainBundle] pathsForResourcesOfType:@"jpg" inDirectory:@"Vacation Photos"];
+    [self.collectionView registerClass:[UICollectionViewCell class] forCellWithReuseIdentifier:@"Cell"];}
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section{    return [self.imagePaths count];}
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath
+{    //dequeue cell    UICollectionViewCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"Cell" forIndexPath:indexPath];
+    //add the tiled layer    CATiledLayer *tileLayer = [cell.contentView.layer.sublayers lastObject];
+    if (!tileLayer) {        tileLayer = [CATiledLayer layer];        tileLayer.frame = cell.bounds;
+        tileLayer.contentsScale = [UIScreen mainScreen].scale;
+        tileLayer.tileSize = CGSizeMake(cell.bounds.size.width * [UIScreen mainScreen].scale, cell.bounds.size.height * [UIScreen mainScreen].scale);
+        tileLayer.delegate = self;        [tileLayer setValue:@(indexPath.row) forKey:@"index"];
+        [cell.contentView.layer addSublayer:tileLayer];    }    //tag the layer with the correct index and reload    tileLayer.contents = nil;    [tileLayer setValue:@(indexPath.row) forKey:@"index"];
+    [tileLayer setNeedsDisplay];    return cell;}
+- (void)drawLayer:(CATiledLayer *)layer inContext:(CGContextRef)ctx
+{    //get image index    NSInteger index = [[layer valueForKey:@"index"] integerValue];    //load tile image    NSString *imagePath = self.imagePaths[index];    UIImage *tileImage = [UIImage imageWithContentsOfFile:imagePath];    //calculate image rect    CGFloat aspectRatio = tileImage.size.height / tileImage.size.width;
+    CGRect imageRect = CGRectZero;    imageRect.size.width = layer.bounds.size.width;    imageRect.size.height = layer.bounds.size.height * aspectRatio;
+    imageRect.origin.y = (layer.bounds.size.height - imageRect.size.height)/2;    //draw tile    UIGraphicsPushContext(ctx);
+    [tileImage drawInRect:imageRect];
+    UIGraphicsPopContext();
+}
+@end```
+需要解释几点：
+* `CATiledLayer`的`tileSize`属性单位是像素，而不是点，所以为了保证瓦片和表格尺寸一致，需要乘以屏幕比例因子。
+* 在`-drawLayer:inContext:`方法中，我们需要知道图层属于哪一个`indexPath`以加载正确的图片。这里我们利用了`CALayer`的KVC来存储和检索任意的值，将图层和索引打标签。
+结果`CATiledLayer`工作的很好，性能问题解决了，而且和用GCD实现的代码量差不多。仅有一个问题在于图片加载到屏幕上后有一个明显的淡入（图14.4）。
+
+<img src="./14.4.jpeg" alt="图14.4" title="图14.4" width="700" />
+图14.4 加载图片之后的淡入
+我们可以调整`CATiledLayer`的`fadeDuration`属性来调整淡入的速度，或者直接将整个渐变移除，但是这并没有根本性地去除问题：在图片加载到准备绘制的时候总会有一个延迟，这将会导致滑动时候新图片的跳入。这并不是`CATiledLayer`的问题，使用GCD的版本也有这个问题。
+即使使用上述我们讨论的所有加载图片和缓存的技术，有时候仍然会发现实时加载大图还是有问题。就和13章中提到的那样，iPad上一整个视网膜屏图片分辨率达到了2048x1536，而且会消耗12MB的RAM（未压缩）。第三代iPad的硬件并不能支持1/60秒的帧率加载，解压和显示这种图片。即使用后台线程加载来避免动画卡顿，仍然解决不了问题。
+我们可以在加载的同时显示一个占位图片，但这并没有根本解决问题，我们可以做到更好。
+###分辨率交换
+视网膜分辨率（根据苹果市场定义）代表了人的肉眼在正常视角距离能够分辨的最小像素尺寸。但是这只能应用于静态像素。当观察一个移动图片时，你的眼睛就会对细节不敏感，于是一个低分辨率的图片和视网膜质量的图片没什么区别了。
+
+如果需要快速加载和显示移动大图，简单的办法就是欺骗人眼，在移动传送器的时候显示一个小图（或者低分辨率），然后当停止的时候再换成大图。这意味着我们需要对每张图片存储两份不同分辨率的副本，但是幸运的是，由于需要同时支持Retina和非Retina设备，本来这就是普遍要做到的。
+
+如果从远程源或者用户的相册加载没有可用的低分辨率版本图片，那就可以动态将大图绘制到较小的`CGContext`，然后存储到某处以备复用。
+
+为了做到图片交换，我们需要利用`UIScrollView`的一些实现`UIScrollViewDelegate`协议的委托方法（和其他类似于`UITableView`和`UICollectionView`基于滚动视图的控件一样）：    - (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate;    - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView;	
+你可以使用这几个方法来检测传送器是否停止滚动，然后加载高分辨率的图片。只要高分辨率图片和低分辨率图片尺寸颜色保持一致，你会很难察觉到替换的过程（保证在同一台机器使用相同的图像程序或者脚本生成这些图片）。
