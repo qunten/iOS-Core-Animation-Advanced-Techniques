@@ -263,9 +263,80 @@ CGImageRelease(imageRef);CFRelease(source);```这样就可以使用`kCGImage
 }
 @end```
 对每张图片都使用两个独立的文件确实有些累赘。JPNG的库（[https://github.com/nicklockwood/JPNG](https://github.com/nicklockwood/JPNG)）对这个技术提供了一个开源的可以复用的实现，并且添加了直接使用`+imageNamed:`和`+imageWithContentsOfFile:`方法的支持。###JPEG 2000
-除了JPEG和PNG之外iOS还支持别的一些格式，例如TIFF和GIF，但是由于他们质量压缩得更厉害，性能比JPEG和PNG糟糕的对，所以大多数情况并不用考虑。
+除了JPEG和PNG之外iOS还支持别的一些格式，例如TIFF和GIF，但是由于他们质量压缩得更厉害，性能比JPEG和PNG糟糕的多，所以大多数情况并不用考虑。
 但是iOS之后，苹果低调添加了对JPEG 2000图片格式的支持，所以大多数人并不知道。它甚至并不被Xcode很好的支持 - JPEG 2000图片都没在Interface Builder中显示。但是JPEG 2000图片在（设备和模拟器）运行时会有效，而且比JPEG质量更好，同样也对透明通道有很好的支持。但是JPEG 2000图片在加载和显示图片方面明显要比PNG和JPEG慢得多，所以对图片大小比运行效率更敏感的时候，使用它是一个不错的选择。
 但仍然要对JPEG 2000保持关注，因为在后续iOS版本说不定就对它的性能做提升，但是在现阶段，混合图片对更小尺寸和质量的文件性能会更好。
 ###PVRTC
-Every iOS device currently on the market uses an Imagination Technologies PowerVR graphics chip as its GPU. The PowerVR chip supports a proprietary image compression standard called PVRTC (PowerVR Texture Compression).
-Unlike most image formats available on iOS, PVRTC images can be drawn directly to the screen without needing to be decompressed beforehand. This means that there is no decompression step after loading, and the size in memory is substantially smaller than any other image type (as little as one-sixteenth of the size, depending on the compression settings used).
+当前市场的每个iOS设备都使用了Imagination Technologies PowerVR图像芯片作为GPU。PowerVR芯片支持一种叫做PVRTC（PowerVR Texture Compression）的标准图片压缩。
+和iOS上可用的大多数图片格式不同，PVRTC不用提前解压就可以被直接绘制到屏幕上。这意味着在加载图片之后不需要有解压操作，所以内存中的图片比其他图片格式大大减少了（这取决于压缩设置，大概只有1/60那么大）。但是PVRTC仍然有一些弊端：
+* 尽管加载的时候消耗了更少的RAM，PVRTC文件比JPEG要大，有时候甚至比PNG还要大（这取决于具体内容），因为压缩算法是针对于性能，而不是文件尺寸。
+* PVRTC必须要是二维正方形，如果源图片不满足这些要求，那必须要在转换成PVRTC的时候强制拉伸或者填充空白空间。
+* 质量并不是很好，尤其是透明图片。通常看起来更像严重压缩的JPEG文件。
+* PVRTC不能用Core Graphics绘制，也不能在普通的`UIImageView`显示，也不能直接用作图层的内容。你必须要用作OpenGL纹理加载PVRTC图片，然后映射到一对三角板来在`CAEAGLLayer`或者`GLKView`中显示。* 创建一个OpenGL纹理来绘制PVRTC图片的开销相当昂贵。除非你想把所有图片绘制到一个相同的上下文，不然这完全不能发挥PVRTC的优势。
+* PVRTC使用了一个不对称的压缩算法。尽管它几乎立即解压，但是压缩过程相当漫长。在一个现代快速的桌面Mac电脑上，它甚至要消耗一分钟甚至更多来生成一个PVRTC大图。因此在iOS设备上最好不要实时生成。如果你愿意使用OpehGL，而且即使提前生成图片也能忍受得了，那么PVRTC将会提供相对于别的可用格式来说非常高效的加载性能。比如，可以在主线程1/60秒之内加载并显示一张2048×2048的PVRTC图片（这已经足够大来填充一个视网膜屏幕的iPad了），这就避免了很多使用线程或者缓存等等复杂的技术难度。
+Xcode包含了一些命令行工具例如*texturetool*来生成PVRTC图片，但是用起来很不方便（它存在于Xcode应用程序束中），而且很受限制。一个更好的方案就是使用Imagination Technologies *PVRTexTool*，可以从http://www.imgtec.com/powervr/insider/sdkdownloads免费获得。
+安装了PVRTexTool之后，就可以使用如下命令在终端中把一个合适大小的PNG图片转换成PVRTC文件：
+    /Applications/Imagination/PowerVR/GraphicsSDK/PVRTexTool/CL/OSX_x86/PVRTexToolCL -i {input_file_name}.png -o {output_file_name}.pvr -legacypvr -p -f PVRTC1_4 -q pvrtcbest
+清单14.8的代码展示了加载和显示PVRTC图片的步骤（第6章`CAEAGLLayer`例子代码改动而来）。清单14.8 加载和显示PVRTC图片
+```objective-c
+#import "ViewController.h" 
+#import <QuartzCore/QuartzCore.h> 
+#import <GLKit/GLKit.h>
+@interface ViewController ()
+@property (nonatomic, weak) IBOutlet UIView *glView;
+@property (nonatomic, strong) EAGLContext *glContext;
+@property (nonatomic, strong) CAEAGLLayer *glLayer;
+@property (nonatomic, assign) GLuint framebuffer;
+@property (nonatomic, assign) GLuint colorRenderbuffer;
+@property (nonatomic, assign) GLint framebufferWidth;
+@property (nonatomic, assign) GLint framebufferHeight;
+@property (nonatomic, strong) GLKBaseEffect *effect;
+@property (nonatomic, strong) GLKTextureInfo *textureInfo;
+@end
+@implementation ViewController
+- (void)setUpBuffers
+{    //set up frame buffer    glGenFramebuffers(1, &_framebuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, _framebuffer);    //set up color render buffer    glGenRenderbuffers(1, &_colorRenderbuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, _colorRenderbuffer);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, _colorRenderbuffer);
+    [self.glContext renderbufferStorage:GL_RENDERBUFFER fromDrawable:self.glLayer];
+    glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH, &_framebufferWidth);
+    glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT, &_framebufferHeight);
+    //check success    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {        NSLog(@"Failed to make complete framebuffer object: %i", glCheckFramebufferStatus(GL_FRAMEBUFFER));    }
+}
+- (void)tearDownBuffers
+{    if (_framebuffer) {        //delete framebuffer        glDeleteFramebuffers(1, &_framebuffer);        _framebuffer = 0;
+    }    if (_colorRenderbuffer) {        //delete color render buffer        glDeleteRenderbuffers(1, &_colorRenderbuffer);        _colorRenderbuffer = 0;
+    }}
+- (void)drawFrame
+{    //bind framebuffer & set viewport    glBindFramebuffer(GL_FRAMEBUFFER, _framebuffer);
+    glViewport(0, 0, _framebufferWidth, _framebufferHeight);    //bind shader program    [self.effect prepareToDraw];    //clear the screen    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(0.0, 0.0, 0.0, 0.0);    //set up vertices    GLfloat vertices[] = {        -1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f    };
+    //set up colors    GLfloat texCoords[] = {        0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f    };    //draw triangle    glEnableVertexAttribArray(GLKVertexAttribPosition);
+    glEnableVertexAttribArray(GLKVertexAttribTexCoord0);
+    glVertexAttribPointer(GLKVertexAttribPosition, 2, GL_FLOAT, GL_FALSE, 0, vertices);
+    glVertexAttribPointer(GLKVertexAttribTexCoord0, 2, GL_FLOAT, GL_FALSE, 0, texCoords);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);    //present render buffer    glBindRenderbuffer(GL_RENDERBUFFER, _colorRenderbuffer);    [self.glContext presentRenderbuffer:GL_RENDERBUFFER];
+}
+- (void)viewDidLoad
+{    [super viewDidLoad];    //set up context    self.glContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];    [EAGLContext setCurrentContext:self.glContext];    //set up layer    self.glLayer = [CAEAGLLayer layer];
+    self.glLayer.frame = self.glView.bounds;
+    self.glLayer.opaque = NO;    [self.glView.layer addSublayer:self.glLayer];
+    self.glLayer.drawableProperties = @{kEAGLDrawablePropertyRetainedBacking: @NO, kEAGLDrawablePropertyColorFormat: kEAGLColorFormatRGBA8};    //load texture    glActiveTexture(GL_TEXTURE0);    NSString *imageFile = [[NSBundle mainBundle] pathForResource:@"Snowman" ofType:@"pvr"];
+    self.textureInfo = [GLKTextureLoader textureWithContentsOfFile:imageFile options:nil error:NULL];    //create texture    GLKEffectPropertyTexture *texture = [[GLKEffectPropertyTexture alloc] init];    texture.enabled = YES;    texture.envMode = GLKTextureEnvModeDecal;
+    texture.name = self.textureInfo.name;    //set up base effect    self.effect = [[GLKBaseEffect alloc] init];
+    self.effect.texture2d0.name = texture.name;    //set up buffers    [self setUpBuffers];    //draw frame    [self drawFrame];
+}
+- (void)viewDidUnload
+{    [self tearDownBuffers];    [super viewDidUnload];
+}
+- (void)dealloc
+{    [self tearDownBuffers];    [EAGLContext setCurrentContext:nil];
+}
+@end```
+如你所见，非常不容易，如果你对在常规应用中使用PVRTC图片很感兴趣的话（例如基于OpenGL的游戏），可以参考一下`GLView`的库（[https://github.com/nicklockwood/GLView](https://github.com/nicklockwood/GLView)），它提供了一个简单的`GLImageView`类，重新实现了`UIImageView`的各种功能，但同时提供了PVRTC图片，而不需要你写任何OpenGL代码。
+##总结
+
+在这章中，我们研究了和图片加载解压相关的性能问题，并延展了一系列解决方案。
+
+在第15章“图层性能”中，我们将讨论和图层渲染和组合相关的性能问题。
