@@ -36,4 +36,4 @@ iOS-Core-Animation-Advanced-Techniques
 * [15-图层性能](https://github.com/AttackOnDobby/iOS-Core-Animation-Advanced-Techniques/blob/master/15-图层性能/15-图层性能.md)
 
 
-附上[ZsIsMe](https://github.com/ZsIsMe)同学制作的[gitbook排版](https://www.gitbook.com/explore)，非常感谢大家的辛勤劳动
+附上[ZsIsMe](https://github.com/ZsIsMe)同学制作的[gitbook排版](http://zsisme.gitbooks.io/ios-/)，非常感谢大家的辛勤劳动
